@@ -8,7 +8,7 @@ Run from the tests/ directory.
 
 Usage:
     ./test-dit.py
-    GGML_BACKEND=CPU ./test-dit.py
+    ./test-dit.py --device CPU
 """
 import os
 import subprocess
@@ -24,6 +24,8 @@ from diffusers.models.transformers.transformer_minimax_music3 import (
 from diffusers.utils import logging as diffusers_logging
 
 BIN = "../build/test-dit"
+# A leading "--device <name>" is forwarded to the harness
+DEVICE = ["--device", sys.argv[2]] if sys.argv[1:2] == ["--device"] else []
 CKPT = "../checkpoints/transformer"
 GGUF = "../models/MiniMax-Music3-transformer-F32.gguf"
 TMP = "tmp"
@@ -62,7 +64,7 @@ def main():
     cond.squeeze(0).contiguous().numpy().astype("float32").tofile(TMP + "/dit_cond.bin")
     ref = vel.squeeze(0).T.contiguous().numpy().astype("float32").ravel()
 
-    subprocess.run([BIN, GGUF, TMP + "/dit_xt.bin", TMP + "/dit_cond.bin", str(T_LATENT), str(TIMESTEP),
+    subprocess.run([BIN] + DEVICE + [GGUF, TMP + "/dit_xt.bin", TMP + "/dit_cond.bin", str(T_LATENT), str(TIMESTEP),
                     TMP + "/dit.bin"], check=True)
 
     got = np.fromfile(TMP + "/dit.bin", dtype="float32")

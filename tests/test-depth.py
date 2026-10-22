@@ -9,7 +9,7 @@ Run from the tests/ directory.
 
 Usage:
     ./test-depth.py
-    GGML_BACKEND=CPU ./test-depth.py
+    ./test-depth.py --device CPU
 """
 import os
 import subprocess
@@ -25,6 +25,8 @@ from diffusers.models.transformers.minimax_music3_rvq_depth_decoder import (
 from diffusers.utils import logging as diffusers_logging
 
 BIN = "../build/test-depth"
+# A leading "--device <name>" is forwarded to the harness
+DEVICE = ["--device", sys.argv[2]] if sys.argv[1:2] == ["--device"] else []
 CKPT = "../checkpoints/rvq_depth_decoder"
 GGUF = "../models/MiniMax-Music3-rvq_depth_decoder-BF16.gguf"
 TMP = "tmp"
@@ -66,7 +68,7 @@ def main():
     ref_hidden = hidden.squeeze(0).contiguous().numpy().astype("float32").ravel()
     ref_logits = logits.squeeze(0).contiguous().numpy().astype("float32").ravel()
 
-    subprocess.run([BIN, GGUF, TMP + "/depth_seq.bin", str(SEQ_LEN), TMP + "/depth_h.bin", TMP + "/depth_l.bin"],
+    subprocess.run([BIN] + DEVICE + [GGUF, TMP + "/depth_seq.bin", str(SEQ_LEN), TMP + "/depth_h.bin", TMP + "/depth_l.bin"],
                    check=True)
 
     ok = report("depth-hiddens", ref_hidden, np.fromfile(TMP + "/depth_h.bin", dtype="float32"), MAX_REL)

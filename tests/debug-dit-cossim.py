@@ -14,8 +14,9 @@ Usage:
     cd tests/
     ./debug-dit-cossim.py                   # DiT BF16
     ./debug-dit-cossim.py --quant Q6_K      # DiT Q6_K
+    ./debug-dit-cossim.py --device CPU      # pick the GGML device
 
-Backend follows GGML_BACKEND; the archive loop lives in debug-dit-cossim.sh.
+The archive loop lives in debug-dit-cossim.sh.
 """
 import argparse
 import json
@@ -95,7 +96,7 @@ def stft_cos(a, b, win=2048, hop=512):
 
 # GGML runner
 
-def run_ggml(dump_dir, req, quant):
+def run_ggml(dump_dir, req, quant, device=None):
     ggml_bin = "../build/mm-synth"
     if not os.path.isfile(ggml_bin):
         print(f"[GGML] binary not found: {ggml_bin}")
@@ -119,6 +120,8 @@ def run_ggml(dump_dir, req, quant):
     cmd = [ggml_bin, "--models", "../models", "--request", request_json,
            "--dump", dump_dir, "--no-fa", "--out", os.path.join(dump_dir, "output.wav")]
     print(f"[GGML] Running MiniMax-Music3-transformer-{quant}.gguf...")
+    if device:
+        cmd += ["--device", device]
     r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=None, text=True)
     n = len([f for f in os.listdir(dump_dir) if f.endswith(".bin")])
     if r.returncode != 0:
@@ -314,6 +317,7 @@ def compare(dirs, stages, tag):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quant", default="F32", help="DiT GGUF quant suffix (F32, Q8_0, Q6_K, Q5_K_M, Q4_K_M)")
+    ap.add_argument("--device", default=None, help="GGML device passed to the binary (default: best available)")
     args = ap.parse_args()
 
     if not os.path.isfile("request0.json"):
@@ -331,7 +335,7 @@ def main():
 
     if os.path.isdir(dump_ggml):
         shutil.rmtree(dump_ggml)
-    if not run_ggml(dump_ggml, req, args.quant):
+    if not run_ggml(dump_ggml, req, args.quant, args.device):
         print("[DiT] GGML failed")
         sys.exit(1)
 

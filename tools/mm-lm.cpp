@@ -7,6 +7,7 @@
 // the expensive stochastic stage runs once, the synthesis parameters
 // (models, steps, seed, CFG) stay free to iterate on.
 
+#include "backend.h"
 #include "model-registry.h"
 #include "pipeline.h"
 #include "prompt.h"
@@ -29,6 +30,8 @@ static void print_usage(const char * prog) {
             "  --request <json>       Input request JSON (carries model routing)\n"
             "\n"
             "Optional:\n"
+            "  --device <name>        Compute device: CUDA0, Vulkan0, MTL0, CPU...\n"
+            "                         (default: best available)\n"
             "  --caption <text>       Caption (instead of --request)\n"
             "  --lyrics <text>        Lyrics (instead of --request)\n"
             "  --out <path>           Output request JSON (default: request.json)\n"
@@ -59,7 +62,7 @@ static bool write_file(const char * path, const std::string & data) {
 }
 
 int main(int argc, char ** argv) {
-    std::string       models, out_path = "request.json", request_path, dump_tokens_path;
+    std::string       models, out_path = "request.json", request_path, dump_tokens_path, device;
     MM3Request        req;
     MM3PipelineParams params;
     request_init(&req);
@@ -75,6 +78,8 @@ int main(int argc, char ** argv) {
             models = argv[++i];
         } else if (a == "--request" && i + 1 < argc) {
             request_path = argv[++i];
+        } else if (a == "--device" && i + 1 < argc) {
+            device = argv[++i];
         } else if (a == "--caption" && i + 1 < argc) {
             req.caption = argv[++i];
         } else if (a == "--lyrics" && i + 1 < argc) {
@@ -102,6 +107,10 @@ int main(int argc, char ** argv) {
     }
 
     if (models.empty()) {
+        print_usage(argv[0]);
+        return 1;
+    }
+    if (!device.empty() && !backend_set_device(device.c_str())) {
         print_usage(argv[0]);
         return 1;
     }

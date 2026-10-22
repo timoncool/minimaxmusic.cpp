@@ -5,6 +5,7 @@
 // PCM16 WAV. Shares the request contract with mm-server.
 
 #include "audio-io.h"
+#include "backend.h"
 #include "model-registry.h"
 #include "pipeline.h"
 #include "request.h"
@@ -26,6 +27,8 @@ static void print_usage(const char * argv0) {
             "  --request <json>       Input request JSON (carries model routing)\n"
             "\n"
             "Optional:\n"
+            "  --device <name>        Compute device: CUDA0, Vulkan0, MTL0, CPU...\n"
+            "                         (default: best available)\n"
             "  --caption <text>       Caption (instead of --request)\n"
             "  --lyrics <text>        Lyrics (instead of --request)\n"
             "  --out <path>           Output audio path (default: out.mp3)\n"
@@ -47,7 +50,7 @@ static void print_usage(const char * argv0) {
 }
 
 int main(int argc, char ** argv) {
-    std::string                    models, out_path = "out.mp3", request_path, adapters_dir;
+    std::string                    models, out_path = "out.mp3", request_path, adapters_dir, device;
     std::vector<MM3RequestAdapter> cli_adapters;
     MM3Request                     req;
     MM3PipelineParams              params;
@@ -66,6 +69,8 @@ int main(int argc, char ** argv) {
             models = argv[++i];
         } else if (a == "--request" && i + 1 < argc) {
             request_path = argv[++i];
+        } else if (a == "--device" && i + 1 < argc) {
+            device = argv[++i];
         } else if (a == "--caption" && i + 1 < argc) {
             req.caption = argv[++i];
         } else if (a == "--lyrics" && i + 1 < argc) {
@@ -108,6 +113,10 @@ int main(int argc, char ** argv) {
     }
     req.adapters.insert(req.adapters.end(), cli_adapters.begin(), cli_adapters.end());
     if (models.empty()) {
+        print_usage(argv[0]);
+        return 1;
+    }
+    if (!device.empty() && !backend_set_device(device.c_str())) {
         print_usage(argv[0]);
         return 1;
     }

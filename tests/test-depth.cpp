@@ -4,15 +4,27 @@
 // normalized hiddens and the last-step head logits, for comparison against
 // the torch reference dump.
 
+#include "backend.h"
 #include "depth-decoder.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 int main(int argc, char ** argv) {
+    // A leading --device <name> picks the device, the positional arguments follow
+    if (argc > 2 && !strcmp(argv[1], "--device")) {
+        if (!backend_set_device(argv[2])) {
+            return 1;
+        }
+        for (int i = 3; i <= argc; i++) {
+            argv[i - 2] = argv[i];
+        }
+        argc -= 2;
+    }
     if (argc != 6) {
-        fprintf(stderr, "usage: %s depth.gguf seq.bin S hiddens_out.bin logits_out.bin\n", argv[0]);
+        fprintf(stderr, "usage: %s [--device <name>] depth.gguf seq.bin S hiddens_out.bin logits_out.bin\n", argv[0]);
         return 1;
     }
 

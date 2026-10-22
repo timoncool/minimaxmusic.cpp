@@ -154,6 +154,10 @@ Usage: ./mm-server --models <dir> [options]
 Required:
   --models <dir>         Directory of GGUF model files
 
+Optional:
+  --device <name>        Compute device: CUDA0, Vulkan0, MTL0, CPU...
+                         (default: best available)
+
 Server:
   --host <addr>          Listen address (default: 127.0.0.1)
   --port <N>             Listen port (default: 8086)

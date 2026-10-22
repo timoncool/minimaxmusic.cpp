@@ -4,15 +4,27 @@
 // and writes the interleaved stereo waveform as raw f32, for comparison
 // against the torch reference dump.
 
+#include "backend.h"
 #include "vae.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 int main(int argc, char ** argv) {
+    // A leading --device <name> picks the device, the positional arguments follow
+    if (argc > 2 && !strcmp(argv[1], "--device")) {
+        if (!backend_set_device(argv[2])) {
+            return 1;
+        }
+        for (int i = 3; i <= argc; i++) {
+            argv[i - 2] = argv[i];
+        }
+        argc -= 2;
+    }
     if (argc != 5) {
-        fprintf(stderr, "usage: %s vae.gguf latent.bin T_latent audio_out.bin\n", argv[0]);
+        fprintf(stderr, "usage: %s [--device <name>] vae.gguf latent.bin T_latent audio_out.bin\n", argv[0]);
         return 1;
     }
 

@@ -8,7 +8,7 @@ Run from the tests/ directory.
 
 Usage:
     ./test-cond.py
-    GGML_BACKEND=CPU ./test-cond.py
+    ./test-cond.py --device CPU
 """
 import os
 import subprocess
@@ -24,6 +24,8 @@ from diffusers.models.condition_embedders.condition_embedder_minimax_music3 impo
 from diffusers.utils import logging as diffusers_logging
 
 BIN = "../build/test-cond"
+# A leading "--device <name>" is forwarded to the harness
+DEVICE = ["--device", sys.argv[2]] if sys.argv[1:2] == ["--device"] else []
 CKPT = "../checkpoints/condition_encoder"
 GGUF = "../models/MiniMax-Music3-condition_encoder-F32.gguf"
 TMP = "tmp"
@@ -58,7 +60,7 @@ def main():
     hidden.numpy().astype("float32").tofile(TMP + "/cond_hidden.bin")
     ref = cond.numpy().astype("float32").ravel()
 
-    subprocess.run([BIN, GGUF, TMP + "/cond_hidden.bin", str(FRAMES), TMP + "/cond.bin"], check=True)
+    subprocess.run([BIN] + DEVICE + [GGUF, TMP + "/cond_hidden.bin", str(FRAMES), TMP + "/cond.bin"], check=True)
 
     got = np.fromfile(TMP + "/cond.bin", dtype="float32")
     sys.exit(0 if report("cond", ref, got, MAX_REL) else 1)

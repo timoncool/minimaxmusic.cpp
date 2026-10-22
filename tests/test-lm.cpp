@@ -4,15 +4,27 @@
 // the logits and the last hidden state of both forwards for comparison
 // against the transformers reference.
 
+#include "backend.h"
 #include "qwen3-lm.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 int main(int argc, char ** argv) {
+    // A leading --device <name> picks the device, the positional arguments follow
+    if (argc > 2 && !strcmp(argv[1], "--device")) {
+        if (!backend_set_device(argv[2])) {
+            return 1;
+        }
+        for (int i = 3; i <= argc; i++) {
+            argv[i - 2] = argv[i];
+        }
+        argc -= 2;
+    }
     if (argc < 4) {
-        fprintf(stderr, "usage: %s lm.gguf out_prefix id0 [id1 ...]\n", argv[0]);
+        fprintf(stderr, "usage: %s [--device <name>] lm.gguf out_prefix id0 [id1 ...]\n", argv[0]);
         return 1;
     }
 

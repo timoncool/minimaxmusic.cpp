@@ -8,7 +8,7 @@ Run from the tests/ directory.
 
 Usage:
     ./test-vae.py
-    GGML_BACKEND=CPU ./test-vae.py
+    ./test-vae.py --device CPU
 """
 import os
 import subprocess
@@ -25,6 +25,8 @@ from diffusers.models.autoencoders.minimax_music3_vocoder import MiniMaxMusic3Vo
 from diffusers.utils import logging as diffusers_logging
 
 BIN = "../build/test-vae"
+# A leading "--device <name>" is forwarded to the harness
+DEVICE = ["--device", sys.argv[2]] if sys.argv[1:2] == ["--device"] else []
 CKPT = "../checkpoints/vocoder"
 GGUF = "../models/MiniMax-Music3-vocoder-F32.gguf"
 TMP = "tmp"
@@ -60,7 +62,7 @@ def main():
     latent.numpy().astype("float32").tofile(TMP + "/latent.bin")
     ref = audio.squeeze(0).T.contiguous().numpy().astype("float32").ravel()
 
-    subprocess.run([BIN, GGUF, TMP + "/latent.bin", str(T_LATENT), TMP + "/audio.bin"], check=True)
+    subprocess.run([BIN] + DEVICE + [GGUF, TMP + "/latent.bin", str(T_LATENT), TMP + "/audio.bin"], check=True)
 
     got = np.fromfile(TMP + "/audio.bin", dtype="float32")
     sys.exit(0 if report("vae", ref, got, MAX_REL) else 1)

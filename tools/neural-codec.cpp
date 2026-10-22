@@ -33,6 +33,7 @@
 //   neural-codec --vae model.gguf --decode -i song.nac4 -o song.wav
 
 #include "audio-io.h"
+#include "backend.h"
 #include "vae-enc.h"
 #include "vae.h"
 #include "version.h"
@@ -171,6 +172,8 @@ static void print_usage(const char * prog) {
             "               song.vae -> song.wav\n"
             "\n"
             "Memory control:\n"
+            "  --device <name>         Compute device: CUDA0, Vulkan0, MTL0, CPU...\n"
+            "                          (default: best available)\n"
             "  --vae-chunk <N>         Latent frames per tile (default: 689)\n"
             "  --vae-overlap <N>       Overlap frames per side (default: 86)\n"
             "\n"
@@ -332,6 +335,7 @@ int main(int argc, char ** argv) {
     const char * input_path  = NULL;
     const char * output_path = NULL;
     const char * format      = "wav16";
+    const char * device      = NULL;
     int          mode        = -1;  // 0 = encode, 1 = decode
     int          quant       = 0;   // 0 = f32, 8 = q8, 4 = q4
     int          chunk_size  = 689;
@@ -346,6 +350,8 @@ int main(int argc, char ** argv) {
             output_path = argv[++i];
         } else if (strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
             format = argv[++i];
+        } else if (strcmp(argv[i], "--device") == 0 && i + 1 < argc) {
+            device = argv[++i];
         } else if (strcmp(argv[i], "--vae-chunk") == 0 && i + 1 < argc) {
             chunk_size = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--vae-overlap") == 0 && i + 1 < argc) {
@@ -365,6 +371,10 @@ int main(int argc, char ** argv) {
     }
 
     if (!vae_path || !input_path || mode < 0) {
+        print_usage(argv[0]);
+        return 1;
+    }
+    if (device && !backend_set_device(device)) {
         print_usage(argv[0]);
         return 1;
     }

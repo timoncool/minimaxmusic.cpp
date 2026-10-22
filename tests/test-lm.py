@@ -8,7 +8,7 @@ Run from the tests/ directory.
 
 Usage:
     ./test-lm.py
-    GGML_BACKEND=CPU ./test-lm.py
+    ./test-lm.py --device CPU
 """
 import os
 import subprocess
@@ -22,6 +22,8 @@ from transformers import Qwen3ForCausalLM
 from transformers.utils import logging as hf_logging
 
 BIN = "../build/test-lm"
+# A leading "--device <name>" is forwarded to the harness
+DEVICE = ["--device", sys.argv[2]] if sys.argv[1:2] == ["--device"] else []
 CKPT = "../checkpoints/language_model"
 GGUF = "../models/MiniMax-Music3-language_model-BF16.gguf"
 TMP = "tmp"
@@ -56,7 +58,7 @@ def main():
         ref = {"lm-prefill": model(input_ids=torch.tensor([IDS[:-1]])).logits[0, -1].numpy().astype("float32"),
                "lm-decode": model(input_ids=torch.tensor([IDS])).logits[0, -1].numpy().astype("float32")}
 
-    subprocess.run([BIN, GGUF, TMP + "/lm"] + [str(i) for i in IDS], check=True)
+    subprocess.run([BIN] + DEVICE + [GGUF, TMP + "/lm"] + [str(i) for i in IDS], check=True)
 
     ok = True
     for label, path in (("lm-prefill", "/lm_prefill_logits.bin"), ("lm-decode", "/lm_decode_logits.bin")):
