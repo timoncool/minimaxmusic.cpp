@@ -54,7 +54,6 @@ struct DiT {
     static const int N_LAYERS   = 36;
     static const int N_HEADS    = 32;
     static const int HEAD_DIM   = 64;
-    static const int FF_INNER   = 8192;
     static const int ROTARY_DIM = 32;
     static const int FOURIER    = 256;
 
@@ -189,7 +188,7 @@ static struct ggml_tensor * dit_attn_f32(struct ggml_context * ctx,
 static struct ggml_tensor * dit_block(struct ggml_context * ctx,
                                       DiT *                 m,
                                       DiTBlock *            b,
-                                      struct ggml_tensor *  x,  // [2048, S, B]
+                                      struct ggml_tensor *  x,  // [2048, S * B]
                                       struct ggml_tensor *  pos,
                                       int                   S,
                                       int                   B,
@@ -229,7 +228,7 @@ static struct ggml_tensor * dit_block(struct ggml_context * ctx,
     } else {
         attn = dit_attn_f32(ctx, q, k, v, scale);
     }
-    attn = ggml_reshape_3d(ctx, attn, Nh * D, S, B);
+    attn = ggml_reshape_2d(ctx, attn, Nh * D, (int64_t) S * B);
 
     struct ggml_tensor * sa_out = ggml_mul_mat(ctx, b->wo, attn);
     if (sa_name) {
@@ -239,13 +238,10 @@ static struct ggml_tensor * dit_block(struct ggml_context * ctx,
     x = ggml_add(ctx, x, sa_out);
 
     // FF: ff_in emits [value(8192), gate(8192)], out = ff_out(value * silu(gate))
-    h                          = dit_layer_norm(ctx, x, b->norm2_w, b->norm2_b);
-    struct ggml_tensor * ff    = ggml_mul_mat(ctx, b->ff_in_w, h);
-    ff                         = ggml_add(ctx, ff, b->ff_in_b);
-    struct ggml_tensor * value = ggml_cont(ctx, ggml_view_3d(ctx, ff, DiT::FF_INNER, S, B, ff->nb[1], ff->nb[2], 0));
-    struct ggml_tensor * gate  = ggml_cont(
-        ctx, ggml_view_3d(ctx, ff, DiT::FF_INNER, S, B, ff->nb[1], ff->nb[2], (size_t) DiT::FF_INNER * ff->nb[0]));
-    struct ggml_tensor * act = ggml_swiglu_split(ctx, gate, value);
+    h                        = dit_layer_norm(ctx, x, b->norm2_w, b->norm2_b);
+    struct ggml_tensor * ff  = ggml_mul_mat(ctx, b->ff_in_w, h);
+    ff                       = ggml_add(ctx, ff, b->ff_in_b);
+    struct ggml_tensor * act = ggml_swiglu_swapped(ctx, ff);
     struct ggml_tensor * out = ggml_mul_mat(ctx, b->ff_out_w, act);
     out                      = ggml_add(ctx, out, b->ff_out_b);
 
@@ -270,6 +266,8 @@ static struct ggml_tensor * dit_build_graph(struct ggml_context * ctx, DiT * m, 
     ggml_set_output(x);
     x = ggml_concat(ctx, m->in_temb, x, 1);
 
+    // the blocks run on [2048, S * B]: the cond and uncond rows share the columns of each GEMM
+    x = ggml_reshape_2d(ctx, x, x->ne[0], (int64_t) S * B);
     for (int i = 0; i < DiT::N_LAYERS; i++) {
         x = dit_block(ctx, m, &m->blocks[i], x, m->in_pos, S, B, i == 0 ? "layer0_sa_output" : NULL);
         if (m->clamp_fp16) {
@@ -283,6 +281,8 @@ static struct ggml_tensor * dit_build_graph(struct ggml_context * ctx, DiT * m, 
             ggml_set_output(x);
         }
     }
+
+    x = ggml_reshape_3d(ctx, x, x->ne[0], S, B);
 
     // Drop the timestep token, project back to latent channels
     struct ggml_tensor * tokens = ggml_view_3d(ctx, x, DiT::DIM, T, B, x->nb[1], x->nb[2], x->nb[1]);
