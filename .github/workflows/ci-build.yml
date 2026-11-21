@@ -73,5 +73,5 @@ jobs:
           --suppress=uselessCallsSubstr \
           --suppress=useStlAlgorithm \
           --suppress=shiftNegativeLHS \
-          -i ggml -i build -i .git -i mp3 \
+          -i ggml -i build -i .git -i mp3 -i vendor \
           .
