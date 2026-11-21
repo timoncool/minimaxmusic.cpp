@@ -460,7 +460,7 @@ static std::string adapter_root(const std::string & input) {
         // extended-length prefix, including for short roots with long children.
         namespace fs = std::filesystem;
         std::error_code error;
-        fs::path absolute = fs::absolute(fs::u8path(input), error);
+        fs::path        absolute = fs::absolute(fs::u8path(input), error);
         if (error) {
             return {};
         }
@@ -1072,7 +1072,7 @@ static bool adapter_backend_can_decode(ggml_backend_t backend, enum ggml_type ty
 // are independent, and the host decode and requant are the slow part of a merge
 static void adapter_for_row_ranges(int64_t nrows, const std::function<void(int64_t, int64_t)> & fn) {
     int64_t threads = (int64_t) std::thread::hardware_concurrency();
-    threads         = (std::max<int64_t>)(1, (std::min<int64_t>)(threads, nrows));
+    threads         = std::max<int64_t>(1, std::min<int64_t>(threads, nrows));
     if (threads == 1) {
         fn(0, nrows);
         return;
@@ -1080,7 +1080,7 @@ static void adapter_for_row_ranges(int64_t nrows, const std::function<void(int64
     std::vector<std::thread> pool;
     int64_t                  step = (nrows + threads - 1) / threads;
     for (int64_t r0 = 0; r0 < nrows; r0 += step) {
-        int64_t r1 = (std::min)(nrows, r0 + step);
+        int64_t r1 = std::min<int64_t>(nrows, r0 + step);
         pool.emplace_back([&fn, r0, r1] { fn(r0, r1); });
     }
     for (auto & t : pool) {
@@ -1359,7 +1359,7 @@ struct AdapterEntry {
 
 static std::vector<AdapterEntry> adapter_scan(const std::string & input) {
     std::vector<AdapterEntry> out;
-    const std::string dir = adapter_root(input);
+    const std::string         dir = adapter_root(input);
     if (dir.empty()) {
         return out;
     }
