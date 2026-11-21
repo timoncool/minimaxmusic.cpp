@@ -417,7 +417,7 @@ static bool load_bpe_from_gguf(BPETokenizer * tok, const char * gguf_path) {
     tok->eos_id  = 151643;
 
     tok->id_to_str.resize(tok->n_vocab);
-    for (auto & kv : tok->vocab) {
+    for (const auto & kv : tok->vocab) {
         if (kv.second >= 0 && kv.second < tok->n_vocab) {
             tok->id_to_str[kv.second] = kv.first;
         }

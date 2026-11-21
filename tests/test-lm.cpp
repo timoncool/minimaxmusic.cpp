@@ -32,23 +32,30 @@ int main(int argc, char ** argv) {
 
     // Prefill all ids but the last, then decode the last id alone
     qw3lm_forward(&lm, ids.data(), (int) ids.size() - 1, 0, logits.data(), nullptr, hidden.data());
-    std::string p = std::string(argv[2]) + "_prefill";
-    FILE *      f = fopen((p + "_logits.bin").c_str(), "wb");
-    fwrite(logits.data(), sizeof(float), V, f);
-    fclose(f);
-    f = fopen((p + "_hidden.bin").c_str(), "wb");
-    fwrite(hidden.data(), sizeof(float), H, f);
-    fclose(f);
+    std::string p     = std::string(argv[2]) + "_prefill";
+    const auto  write = [](const std::string & path, const std::vector<float> & data) {
+        FILE * file = fopen(path.c_str(), "wb");
+        if (!file) {
+            perror(path.c_str());
+            return false;
+        }
+        const bool written = fwrite(data.data(), sizeof(float), data.size(), file) == data.size();
+        const bool closed  = fclose(file) == 0;
+        if (!written || !closed) {
+            fprintf(stderr, "Could not write %s\n", path.c_str());
+        }
+        return written && closed;
+    };
+    if (!write(p + "_logits.bin", logits) || !write(p + "_hidden.bin", hidden)) {
+        return 1;
+    }
 
     int last = ids.back();
     qw3lm_forward(&lm, &last, 1, 0, logits.data(), nullptr, hidden.data());
     p = std::string(argv[2]) + "_decode";
-    f = fopen((p + "_logits.bin").c_str(), "wb");
-    fwrite(logits.data(), sizeof(float), V, f);
-    fclose(f);
-    f = fopen((p + "_hidden.bin").c_str(), "wb");
-    fwrite(hidden.data(), sizeof(float), H, f);
-    fclose(f);
+    if (!write(p + "_logits.bin", logits) || !write(p + "_hidden.bin", hidden)) {
+        return 1;
+    }
 
     fprintf(stderr, "[Test-LM] Prefill %d tokens + decode 1, V=%d H=%d\n", (int) ids.size() - 1, V, H);
     return 0;

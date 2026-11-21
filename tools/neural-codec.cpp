@@ -430,9 +430,17 @@ int main(int argc, char ** argv) {
             free(planar);
             if (!left || !right) {
                 fprintf(stderr, "[VAE] FATAL: resampling failed\n");
+                free(left);
+                free(right);
                 return 1;
             }
             planar = (float *) malloc((size_t) T_rs * 2 * sizeof(float));
+            if (!planar) {
+                fprintf(stderr, "[VAE] FATAL: cannot allocate resampled audio\n");
+                free(left);
+                free(right);
+                return 1;
+            }
             memcpy(planar, left, (size_t) T_rs * sizeof(float));
             memcpy(planar + T_rs, right, (size_t) T_rs * sizeof(float));
             free(left);

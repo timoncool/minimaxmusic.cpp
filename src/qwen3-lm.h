@@ -554,10 +554,7 @@ static void qw3lm_forward(Qwen3LM *     m,
         ggml_set_name(all_hidden, "all_hidden");
         ggml_set_output(all_hidden);
         ggml_build_forward_expand(gf, all_hidden);
-    }
-
-    // Extract last token hidden state: [H, n_tokens] -> [H, 1]
-    if (n_tokens > 1) {
+        // Extract last token hidden state: [H, n_tokens] -> [H, 1]
         hidden = ggml_view_1d(ctx, hidden, H, (int64_t) (n_tokens - 1) * H * sizeof(float));
     }
 

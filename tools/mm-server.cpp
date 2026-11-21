@@ -311,6 +311,8 @@ static void active_job_cancel() {
 }
 
 // cancel callback for long encodes, reads the per-job atomic flag
+// ggml_abort_callback requires a mutable void pointer.
+// cppcheck-suppress constParameterCallback
 static bool server_cancel_job(void * data) {
     auto * flag = (const std::atomic<bool> *) data;
     return flag && flag->load(std::memory_order_relaxed);
@@ -764,7 +766,7 @@ int main(int argc, char ** argv) {
     svr.set_socket_options([](socket_t sock) {
         int one = 1;
 #ifdef _WIN32
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *) &one, sizeof(one));
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&one), sizeof(one));
 #else
         setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 #endif
