@@ -1,0 +1,39 @@
+name: Package MiniMax b79d37f macOS Metal runtime
+on:
+  push:
+    branches: [music-round-mm3-b79d37f-macos-qa]
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, archive and verify the stage
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          export MM3_ENGINE_BUILD_ROOT="$RUNNER_TEMP/mm3-engine-build"
+          export MACOSX_DEPLOYMENT_TARGET=13.0
+          mkdir -p "$MM3_ENGINE_BUILD_ROOT" stage out receipt
+          bash qa-studio/scripts/build-minimax-runtime.sh "$PWD/stage"
+          test "$(git -C "$MM3_ENGINE_BUILD_ROOT/mm3-engine" rev-parse HEAD)" = b79d37f46ae7fd359b3ad805f053385c7768b9cb
+          test "$(git -C "$MM3_ENGINE_BUILD_ROOT/mm3-engine/ggml" rev-parse HEAD)" = 0b9ecc5db1d0853bcd554eb23fba65d0b4f2113f
+          grep -Fx 'GGML_METAL:BOOL=ON' "$MM3_ENGINE_BUILD_ROOT/mm3-engine/build/CMakeCache.txt"
+          name=mm3-runtime-b79d37f-macos-arm64.tar.gz
+          tar -C stage -czf "out/$name" .
+          tar -C receipt -xzf "out/$name"
+          test "$(lipo -archs receipt/mm-server)" = arm64
+          for lib in receipt/*; do
+            if [[ ! -L "$lib" ]]; then otool -L "$lib"; fi
+          done
+          receipt/mm-server --help > "$RUNNER_TEMP/mm3-help.txt" 2>&1 || true
+          grep -i 'b79d37f' "$RUNNER_TEMP/mm3-help.txt"
+          grep -i usage "$RUNNER_TEMP/mm3-help.txt"
+          (cd out && shasum -a 256 "$name" | tee SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mm3-runtime-b79d37f-macos-arm64
+          path: out/
+          if-no-files-found: error
