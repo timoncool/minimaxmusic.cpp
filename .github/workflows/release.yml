@@ -7,6 +7,18 @@ on:
       release_tag:
         description: Full version tag. Leave empty for artifact-only validation.
         type: string
+      skip_linux:
+        description: Skip Linux
+        type: boolean
+        default: false
+      skip_mac:
+        description: Skip macOS
+        type: boolean
+        default: false
+      skip_windows:
+        description: Skip Windows
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,10 +30,14 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       ref: ${{ steps.tag.outputs.ref }}
+      targets: ${{ steps.tag.outputs.targets }}
     steps:
       - id: tag
         env:
           TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          SKIP_LINUX: ${{ inputs.skip_linux || false }}
+          SKIP_MAC: ${{ inputs.skip_mac || false }}
+          SKIP_WINDOWS: ${{ inputs.skip_windows || false }}
         run: |
           set -euo pipefail
           if [[ -n "$TAG" && ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?$ ]]; then
@@ -29,6 +45,15 @@ jobs:
             exit 1
           fi
           printf 'tag=%s\nref=%s\n' "$TAG" "${TAG:-$GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          targets=()
+          if [[ "$SKIP_LINUX" != true ]]; then targets+=('{"os":"ubuntu-22.04","package":"linux-x64"}'); fi
+          if [[ "$SKIP_MAC" != true ]]; then targets+=('{"os":"macos-15","package":"macos-arm64-metal"}'); fi
+          if [[ "$SKIP_WINDOWS" != true ]]; then targets+=('{"os":"windows-2022","package":"windows-x64"}'); fi
+          if (( ${#targets[@]} == 0 )); then
+            echo 'Select at least one platform.' >&2
+            exit 1
+          fi
+          printf 'targets=%s\n' "$(printf '%s\n' "${targets[@]}" | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: select
@@ -36,10 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {os: ubuntu-22.04, package: linux-x64}
-          - {os: macos-15, package: macos-arm64-metal}
-          - {os: windows-2022, package: windows-x64}
+        include: ${{ fromJSON(needs.select.outputs.targets) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,7 +97,7 @@ jobs:
           set -euo pipefail
           flags=(-G Ninja -DCMAKE_BUILD_TYPE=Release)
           if [[ "$RUNNER_OS" == macOS ]]; then
-            flags+=(-DCMAKE_OSX_ARCHITECTURES=arm64 -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
+            flags+=(-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
                     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH=@loader_path)
           else
             nvcc --version
@@ -101,15 +123,23 @@ jobs:
           case "$RUNNER_OS" in
             Windows)
               cp build/*.dll dist/
-              test -f dist/ggml-cuda.dll && test -f dist/ggml-vulkan.dll
+              test -f dist/ggml-cuda.dll
+              test -f dist/ggml-vulkan.dll
               ;;
             Linux)
               cp -P build/libggml*.so* dist/
+              test -f dist/libggml-cuda.so
+              test -f dist/libggml-vulkan.so
               readelf -d dist/mm-server | grep -F '$ORIGIN'
               ;;
             macOS)
               cp -P build/libggml*.dylib dist/
-              test "$(lipo -archs dist/mm-server)" = arm64
+              for file in dist/mm-server dist/mm-lm dist/mm-synth dist/neural-codec dist/mp3-codec dist/quantize dist/*.dylib; do
+                test "$(lipo -archs "$file")" = arm64
+                minos=$(otool -l "$file" | awk '$1 == "minos" { print $2 }')
+                printf '%s: minOS %s\n' "$file" "$minos"
+                [[ "$minos" == 13.0 || "$minos" == 13.0.0 ]]
+              done
               ;;
           esac
           "dist/mm-server$ext" --help > usage.txt 2>&1 || test "$?" -eq 1
@@ -142,4 +172,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.select.outputs.tag }}
-        run: gh release upload "$TAG" minimaxmusic-*.tar.gz minimaxmusic-*.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(minimaxmusic-*.tar.gz minimaxmusic-*.zip)
+          if (( ${#archives[@]} == 0 )); then
+            echo 'No complete distribution artifacts to upload.' >&2
+            exit 1
+          fi
+          gh release upload "$TAG" "${archives[@]}"
