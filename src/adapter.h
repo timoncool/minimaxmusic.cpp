@@ -75,11 +75,7 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef _WIN32
-#    ifndef S_ISDIR
-#        define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
-#    endif
-#else
+#ifndef _WIN32
 #    include <dirent.h>
 #endif
 
@@ -443,6 +439,41 @@ static std::map<std::string, std::string> adapter_read_metadata(const STFile & s
     return out;
 }
 
+// Studio passes verbatim Windows paths. Win32 does not convert forward
+// slashes in these paths, including the descendant paths used by the loader.
+static std::string adapter_path(const std::string & parent, const std::string & name) {
+#ifdef _WIN32
+    const char separator = '\\';
+#else
+    const char separator = '/';
+#endif
+    return parent.back() == separator ? parent + name : parent + separator + name;
+}
+
+static std::string adapter_root(const std::string & input) {
+#ifdef _WIN32
+    if (input.empty() || input.rfind("\\\\?\\", 0) == 0 || input.rfind("\\\\.\\", 0) == 0) {
+        return input;
+    }
+    try {
+        // Normalize standalone drive and UNC roots before adding the
+        // extended-length prefix, including for short roots with long children.
+        namespace fs = std::filesystem;
+        std::error_code error;
+        fs::path absolute = fs::absolute(fs::u8path(input), error);
+        if (error) {
+            return {};
+        }
+        const std::string path = absolute.lexically_normal().make_preferred().u8string();
+        return path.rfind("\\\\", 0) == 0 ? "\\\\?\\UNC\\" + path.substr(2) : "\\\\?\\" + path;
+    } catch (const std::system_error &) {
+        return {};
+    }
+#else
+    return input;
+#endif
+}
+
 // What an adapter_config.json beside the weights says about the scale: its
 // lora_alpha (or alpha), 0 when absent, and whether it trained rank-stabilised
 // (use_rslora), whose scale is alpha / sqrt(rank) instead of alpha / rank
@@ -454,7 +485,7 @@ struct AdapterConfig {
 
 static AdapterConfig adapter_read_config(const std::string & dir) {
     AdapterConfig config;
-    std::string   path = dir + "/adapter_config.json";
+    std::string   path = adapter_path(dir, "adapter_config.json");
     yyjson_doc *  doc  = yyjson_read_file(path.c_str(), 0, NULL, NULL);
     if (!doc) {
         return config;
@@ -481,13 +512,23 @@ static AdapterConfig adapter_read_config(const std::string & dir) {
 }
 
 static bool adapter_is_dir(const std::string & path) {
+#ifdef _WIN32
+    const DWORD attrs = GetFileAttributesA(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+#else
     struct stat sb;
     return stat(path.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode);
+#endif
 }
 
 static bool adapter_is_file(const std::string & path) {
+#ifdef _WIN32
+    const DWORD attrs = GetFileAttributesA(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+#else
     struct stat sb;
     return stat(path.c_str(), &sb) == 0 && !S_ISDIR(sb.st_mode);
+#endif
 }
 
 // Names of the entries of a directory, files or subdirectories, sorted
@@ -495,7 +536,7 @@ static std::vector<std::string> adapter_list_dir(const std::string & dir, bool w
     std::vector<std::string> out;
 #ifdef _WIN32
     WIN32_FIND_DATAA fd;
-    HANDLE           h = FindFirstFileA((dir + "\\*").c_str(), &fd);
+    HANDLE           h = FindFirstFileA(adapter_path(dir, "*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) {
         return out;
     }
@@ -520,7 +561,7 @@ static std::vector<std::string> adapter_list_dir(const std::string & dir, bool w
         if (name == "." || name == "..") {
             continue;
         }
-        if (adapter_is_dir(dir + "/" + name) == want_dirs) {
+        if (adapter_is_dir(adapter_path(dir, name)) == want_dirs) {
             out.push_back(name);
         }
     }
@@ -543,14 +584,14 @@ static std::vector<std::string> adapter_files(const std::string & path) {
         files.push_back(path);
         return files;
     }
-    std::string peft = path + "/adapter_model.safetensors";
+    std::string peft = adapter_path(path, "adapter_model.safetensors");
     if (adapter_is_file(peft)) {
         files.push_back(peft);
         return files;
     }
     for (const auto & name : adapter_list_dir(path, false)) {
         if (adapter_is_safetensors(name)) {
-            files.push_back(path + "/" + name);
+            files.push_back(adapter_path(path, name));
         }
     }
     return files;
@@ -1316,19 +1357,20 @@ struct AdapterEntry {
     AdapterInfo info;
 };
 
-static std::vector<AdapterEntry> adapter_scan(const std::string & dir) {
+static std::vector<AdapterEntry> adapter_scan(const std::string & input) {
     std::vector<AdapterEntry> out;
+    const std::string dir = adapter_root(input);
     if (dir.empty()) {
         return out;
     }
     for (const auto & name : adapter_list_dir(dir, false)) {
         if (adapter_is_safetensors(name)) {
-            out.push_back({ name, dir + "/" + name, {} });
+            out.push_back({ name, adapter_path(dir, name), {} });
         }
     }
     for (const auto & name : adapter_list_dir(dir, true)) {
-        if (!adapter_files(dir + "/" + name).empty()) {
-            out.push_back({ name, dir + "/" + name, {} });
+        if (!adapter_files(adapter_path(dir, name)).empty()) {
+            out.push_back({ name, adapter_path(dir, name), {} });
         }
     }
     for (auto & e : out) {
@@ -1339,11 +1381,12 @@ static std::vector<AdapterEntry> adapter_scan(const std::string & dir) {
 
 // Resolves a request name against the adapter directory. Names are plain
 // entries of the directory, never paths.
-static bool adapter_resolve(const std::string & dir, const std::string & name, std::string * path) {
+static bool adapter_resolve(const std::string & input, const std::string & name, std::string * path) {
+    const std::string dir = adapter_root(input);
     if (dir.empty() || name.empty() || name == "." || name == ".." || name.find_first_of("/\\:") != std::string::npos) {
         return false;
     }
-    std::string p = dir + "/" + name;
+    std::string p = adapter_path(dir, name);
     if (adapter_is_dir(p) ? adapter_files(p).empty() : !(adapter_is_file(p) && adapter_is_safetensors(name))) {
         return false;
     }
