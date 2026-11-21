@@ -556,7 +556,7 @@ static std::vector<std::string> adapter_list_dir(const std::string & dir, bool w
     if (!d) {
         return out;
     }
-    while (struct dirent * e = readdir(d)) {
+    while (const struct dirent * e = readdir(d)) {
         std::string name = e->d_name;
         if (name == "." || name == "..") {
             continue;
@@ -895,7 +895,7 @@ static bool adapter_collect(const std::string &                               fi
             float   scaling = user_scale * (alpha > 0.0f ? alpha / divisor : 1.0f);
             int64_t row0    = 0;
             for (const auto & p : parts) {
-                struct ggml_tensor * t = gf_meta(gf, (p.first + ".weight").c_str());
+                const struct ggml_tensor * t = gf_meta(gf, (p.first + ".weight").c_str());
                 if (t->ne[0] != in) {
                     return fail("LoRA input width " + std::to_string(in) + " != " + std::to_string(t->ne[0]) + " on " +
                                 p.first);
@@ -998,7 +998,7 @@ static bool adapter_collect(const std::string &                               fi
                 user_scale * ((!(factor || factor_w1) || alpha <= 0.0f || dim <= 0.0f) ? 1.0f : alpha / dim);
             int64_t row0 = 0;
             for (const auto & p : parts) {
-                struct ggml_tensor * t = gf_meta(gf, (p.first + ".weight").c_str());
+                const struct ggml_tensor * t = gf_meta(gf, (p.first + ".weight").c_str());
                 if (row0 % c != 0 || p.second % c != 0 || t->ne[0] != b_cols * d) {
                     return fail("LoKr blocks do not tile " + p.first);
                 }
