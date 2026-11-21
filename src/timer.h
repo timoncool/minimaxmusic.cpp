@@ -11,6 +11,4 @@ struct Timer {
     double ms() const {
         return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count();
     }
-
-    void reset() { t = std::chrono::steady_clock::now(); }
 };
