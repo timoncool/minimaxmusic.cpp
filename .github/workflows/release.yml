@@ -223,6 +223,10 @@ jobs:
             | Where-Object { $_ -match '(error|warning|FAILED|fatal)' -or $_ -eq '' } `
             | Select-Object -Last 50
 
+      - name: Verify Windows adapter paths
+        shell: pwsh
+        run: .\build-msvc\Release\test-adapter-path.exe
+
       - name: Smoke test
         continue-on-error: true
         shell: bash

@@ -333,6 +333,8 @@ static void active_job_cancel() {
 }
 
 // cancel callback for long encodes, reads the per-job atomic flag
+// ggml_abort_callback requires a mutable void pointer.
+// cppcheck-suppress constParameterCallback
 static bool server_cancel_job(void * data) {
     auto * flag = (const std::atomic<bool> *) data;
     return flag && flag->load(std::memory_order_relaxed);
@@ -542,8 +544,8 @@ static void handle_tokenize(const httplib::Request & req, httplib::Response & re
         json_error(res, 503, "No tokenizer: the models directory holds no LM GGUF");
         return;
     }
-    std::vector<int> ids = mm3_build_prompt_ids([](const std::string & s) { return bpe_encode(&g_tok, s, false); },
-                                                r.caption, r.lyrics);
+    std::vector<int> ids =
+        mm3_build_prompt_ids([](const std::string & s) { return bpe_encode(&g_tok, s, false); }, r.caption, r.lyrics);
     char body[96];
     snprintf(body, sizeof(body), "{\"tokens\":%zu,\"limit\":%d}", ids.size(), MAX_PROMPT_TOKENS);
     res.set_content(body, "application/json");
@@ -641,8 +643,7 @@ static void handle_synth(const httplib::Request & req, httplib::Response & res) 
         std::vector<std::vector<float>> tracks;
         std::vector<std::string>        codes;
         std::vector<bool>               truncated;
-        PipelineStatus                  status =
-            pipeline_generate(&g_pipeline, r, &job->cancel, tracks, &codes, &truncated);
+        PipelineStatus status = pipeline_generate(&g_pipeline, r, &job->cancel, tracks, &codes, &truncated);
         if (status == PIPELINE_CANCELLED) {
             job->status.store(JobStatus::CANCELLED);
             return;
@@ -780,7 +781,8 @@ static void print_usage(const char * argv0) {
             "  --port <N>             Listen port (default: 8086)\n"
             "  --max-batch <N>        LM batch limit (default: 1)\n"
             "  --max-seq <N>          LM KV cache size (default: model context)\n"
-            "  --keep-loaded          Keep every model resident in VRAM (default: evict between stages; POST /evict unloads them)\n"
+            "  --keep-loaded          Keep every model resident in VRAM (default: evict between stages; POST /evict "
+            "unloads them)\n"
             "  --adapters <dir>       Directory of LoRA / LoKr adapters requests may name\n"
             "\n"
             "Debug:\n"
@@ -846,7 +848,7 @@ int main(int argc, char ** argv) {
 
     LogCapture log_capture;
 
-    g_pipeline.store = store_create(g_keep_loaded ? EVICT_NEVER : EVICT_STRICT);
+    g_pipeline.store        = store_create(g_keep_loaded ? EVICT_NEVER : EVICT_STRICT);
     // STRICT reloads the LM for every request, so its KV can be as long as that request
     g_params.kv_per_request = !g_keep_loaded;
 
@@ -864,7 +866,7 @@ int main(int argc, char ** argv) {
     svr.set_socket_options([](socket_t sock) {
         int one = 1;
 #ifdef _WIN32
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *) &one, sizeof(one));
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&one), sizeof(one));
 #else
         setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 #endif

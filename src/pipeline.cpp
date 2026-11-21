@@ -481,8 +481,8 @@ static PipelineStatus ar_stage(MM3Pipeline *                     p,
     if (truncated_out) {
         truncated_out->assign(N, false);
     }
-    std::vector<int>  sampled(N);
-    std::vector<int>  kv_sets(2 * N);
+    std::vector<int> sampled(N);
+    std::vector<int> kv_sets(2 * N);
     for (int s = 0; s < 2 * N; s++) {
         kv_sets[s] = s;
     }
@@ -739,7 +739,7 @@ PipelineStatus pipeline_generate(MM3Pipeline *                     p,
         } else {
             frame_hiddens.resize(N);
             std::vector<std::vector<int>> codes(N);
-            PipelineStatus st =
+            PipelineStatus                st =
                 ar_stage(p, lm, depth, tok, req, cancel, N, &frame_hiddens, codes, n_frames, truncated_out);
             if (st != PIPELINE_OK) {
                 return st;

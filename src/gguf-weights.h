@@ -171,7 +171,6 @@ static void gf_hotstep_names(const std::string & name, std::vector<std::pair<std
             { "ffn_up",      "up_proj"                  },
             { "ffn_down",    "down_proj"                },
         };
-        std::string r2;
         if (map_tail(rest, top, &mapped)) {
             out->push_back({ mapped, -1 });
         } else if (rest.compare(0, 5, "head.") == 0) {
