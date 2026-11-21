@@ -67,9 +67,7 @@ jobs:
           --suppress=missingInclude \
           --suppress=cstyleCast \
           --suppress=constVariable \
-          --suppress=constVariablePointer \
           --suppress=constParameterPointer \
-          --suppress=variableScope \
           --suppress=uselessCallsSubstr \
           --suppress=useStlAlgorithm \
           --suppress=shiftNegativeLHS \
